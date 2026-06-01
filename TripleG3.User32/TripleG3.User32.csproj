@@ -1,19 +1,19 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net8.0-windows</TargetFramework>
+		<TargetFramework>net10.0-windows</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<WarningsAsErrors>Nullable</WarningsAsErrors>
-		<Version>8.0.3</Version>
+		<Version>10.0.0</Version>
 		<Title>TripleG3.User32</Title>
-		<Description>User.32.dll for net8.0-windows.	If you wish to assist development please contact G3 at the repository link. This is open source and free to use. God bless.</Description>
+		<Description>User.32.dll for net10.0-windows.	If you wish to assist development please contact G3 at the repository link. This is open source and free to use. God bless.</Description>
 		<Authors>Michael Puckett, II</Authors>
 		<Company>TripleG3</Company>
 		<Copyright>@2024</Copyright>
 		<PackageProjectUrl>https://www.nuget.org/packages/TripleG3.User32</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/TripleG3/G3.User32</RepositoryUrl>
-		<PackageTags>C Sharp, C#, net8.0-windows, .NET 8, User32, SetWindowsHookExA, SetWindowsHookEx, User32.dll, Keyboard, Mouse</PackageTags>
+		<PackageTags>C Sharp, C#, net10.0-windows, .NET 10, User32, SetWindowsHookExA, SetWindowsHookEx, User32.dll, Keyboard, Mouse</PackageTags>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<PackageLicenseFile>LICENSE</PackageLicenseFile>
 		<RepositoryType>git</RepositoryType>
