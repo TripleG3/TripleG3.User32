@@ -7,7 +7,7 @@ namespace TripleG3.User32.WindowsHook.Mouse;
 /// </summary>
 public class MouseHook : WindowsHookBase, IMouseHook
 {
-    public MouseHook() : base(WindowsHook.Hook.WH_KEYBOARD_LL) { }
+    public MouseHook() : base(WindowsHook.Hook.WH_MOUSE_LL) { }
 
     public event EventHandler<MouseHookEventArgs> MouseEvent = (sender, e) => { };
 
