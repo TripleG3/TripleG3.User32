@@ -1,69 +1,136 @@
-name: Publish NuGet Package
+name: Build & Publish NuGet
 
 on:
-  release:
-    types: [published]
-  workflow_dispatch:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: nuget-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: read
-
-concurrency:
-  group: publish-nuget-${{ github.ref }}
-  cancel-in-progress: false
+  packages: write
 
 env:
-  DOTNET_NOLOGO: true
-  DOTNET_CLI_TELEMETRY_OPTOUT: true
-  CONFIGURATION: Release
+  DOTNET_VERSION: 10.0.x
+  PACKAGE_ID: TripleG3.User32
   SOLUTION_PATH: TripleG3.User32.slnx
-  PROJECT_PATH: TripleG3.User32/TripleG3.User32.csproj
-  PACKAGE_OUTPUT_PATH: artifacts/packages
+  PROJECT_PATH: src/TripleG3.User32/TripleG3.User32.csproj
+  ARTIFACTS_PATH: artifacts
 
 jobs:
-  publish:
-    name: Build, pack, and publish
+  build-pack-publish:
     runs-on: windows-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Verify NuGet API key secret
+      - name: Calculate next package version
         shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $packageId = $env:PACKAGE_ID
+          $indexUrl = "https://api.nuget.org/v3-flatcontainer/$($packageId.ToLowerInvariant())/index.json"
+          $versions = @()
+
+          try {
+            $response = Invoke-RestMethod -Uri $indexUrl -Headers @{ 'Cache-Control' = 'no-cache' }
+            if ($response.versions) {
+              $versions = @($response.versions)
+            }
+          }
+          catch {
+            $statusCode = $_.Exception.Response.StatusCode.value__
+            if ($statusCode -ne 404) {
+              throw
+            }
+
+            Write-Host "Package $packageId has not been published yet; starting at 1.0.0."
+          }
+
+          $stableVersions = $versions |
+            Where-Object { $_ -match '^\d+\.\d+\.\d+(\.\d+)?$' } |
+            ForEach-Object { [Version]$_ } |
+            Sort-Object -Descending
+
+          if ($stableVersions.Count -eq 0) {
+            $latestVersion = $null
+            $nextVersion = '1.0.0'
+          }
+          else {
+            $latestVersion = $stableVersions[0]
+
+            if ($latestVersion.Revision -ge 0) {
+              $nextVersion = [Version]::new(
+                $latestVersion.Major,
+                $latestVersion.Minor,
+                $latestVersion.Build,
+                $latestVersion.Revision + 1).ToString()
+            }
+            else {
+              $nextVersion = [Version]::new(
+                $latestVersion.Major,
+                $latestVersion.Minor,
+                $latestVersion.Build + 1).ToString()
+            }
+          }
+
+          Write-Host "Latest NuGet.org version: $($latestVersion ?? 'none')"
+          Write-Host "Next package version: $nextVersion"
+
+          "PACKAGE_VERSION=$nextVersion" >> $env:GITHUB_ENV
+          "Latest NuGet.org version: $($latestVersion ?? 'none')" >> $env:GITHUB_STEP_SUMMARY
+          "Next package version: $nextVersion" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Restore dependencies
+        run: dotnet restore $env:SOLUTION_PATH
+
+      - name: Build release
+        run: dotnet build $env:SOLUTION_PATH -c Release --no-restore -p:Version=$env:PACKAGE_VERSION -p:PackageVersion=$env:PACKAGE_VERSION
+
+      - name: Pack
+        run: dotnet pack $env:PROJECT_PATH -c Release --no-build -o $env:ARTIFACTS_PATH -p:Version=$env:PACKAGE_VERSION -p:PackageVersion=$env:PACKAGE_VERSION
+
+      - name: Publish NuGet package
+        if: success()
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           if ([string]::IsNullOrWhiteSpace($env:NUGET_API_KEY)) {
-            throw "The NUGET_API_KEY repository secret is required to publish to NuGet.org."
+            throw "NUGET_API_KEY secret not set; cannot publish $env:PACKAGE_ID $env:PACKAGE_VERSION."
           }
 
-      - name: Restore
-        run: dotnet restore $env:SOLUTION_PATH
+          $packages = Get-ChildItem -Path $env:ARTIFACTS_PATH -Filter *.nupkg -File
+          foreach ($package in $packages) {
+            Write-Host "Publishing $($package.FullName)"
+            dotnet nuget push $package.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+          }
 
-      - name: Build
-        run: dotnet build $env:SOLUTION_PATH --configuration $env:CONFIGURATION --no-restore
-
-      - name: Pack
-        run: dotnet pack $env:PROJECT_PATH --configuration $env:CONFIGURATION --no-build --output $env:PACKAGE_OUTPUT_PATH /p:ContinuousIntegrationBuild=true
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: nuget-package
-          path: ${{ env.PACKAGE_OUTPUT_PATH }}/*.nupkg
-          if-no-files-found: error
-
-      - name: Publish to NuGet.org
-        shell: pwsh
-        env:
-          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      - name: Summary
+        if: always()
         run: |
-          Get-ChildItem -Path $env:PACKAGE_OUTPUT_PATH -Filter *.nupkg | ForEach-Object {
-            dotnet nuget push $_.FullName --api-key $env:NUGET_API_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
+          "## TripleG3.User32 Publish" >> $env:GITHUB_STEP_SUMMARY
+          "Commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
+          "Package version: $env:PACKAGE_VERSION" >> $env:GITHUB_STEP_SUMMARY
+          "Package artifacts:" >> $env:GITHUB_STEP_SUMMARY
+
+          if (Test-Path $env:ARTIFACTS_PATH) {
+            Get-ChildItem -Path $env:ARTIFACTS_PATH -File | ForEach-Object { "- $($_.Name)" } >> $env:GITHUB_STEP_SUMMARY
           }
+          else {
+            "- No artifacts directory was created." >> $env:GITHUB_STEP_SUMMARY
+          }
+
+    # Notes:
+    # - Set the repository or organization secret NUGET_API_KEY with a valid NuGet.org API key.
+    # - This workflow intentionally uses windows-latest because the package targets Windows APIs.
+    # - The package version is calculated automatically from the latest stable version on NuGet.org.
