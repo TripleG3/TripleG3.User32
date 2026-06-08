@@ -92,10 +92,10 @@ jobs:
           "Next package version: $nextVersion" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Restore dependencies
-        run: dotnet restore $env:SOLUTION_PATH
+        run: dotnet restore $env:PROJECT_PATH
 
       - name: Build release
-        run: dotnet build $env:SOLUTION_PATH -c Release --no-restore -p:Version=$env:PACKAGE_VERSION -p:PackageVersion=$env:PACKAGE_VERSION
+        run: dotnet build $env:PROJECT_PATH -c Release --no-restore -p:Version=$env:PACKAGE_VERSION -p:PackageVersion=$env:PACKAGE_VERSION
 
       - name: Pack
         run: dotnet pack $env:PROJECT_PATH -c Release --no-build -o $env:ARTIFACTS_PATH -p:Version=$env:PACKAGE_VERSION -p:PackageVersion=$env:PACKAGE_VERSION
