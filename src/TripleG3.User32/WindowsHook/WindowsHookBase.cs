@@ -17,6 +17,7 @@ public abstract partial class WindowsHookBase(Hook idHook) : IWindowsHook
                                                                                  new Win32Exception(Marshal.GetLastWin32Error()));
 
     private readonly Hook idHook = idHook;
+    private HookProc? hookProc;
 
     /// <summary>
     /// A generic event that runs when the hook is being processed.
@@ -51,7 +52,9 @@ public abstract partial class WindowsHookBase(Hook idHook) : IWindowsHook
             UnHook();
             throw new HookException($"{nameof(Hook)} cannot be called twice with same handle. {nameof(UnHook)} was called prior to this exception to prevent system error.");
         }
-        HookHandle = SetWindowsHookExA((int)idHook, Marshal.GetFunctionPointerForDelegate<HookProc>(MainHookProc), baseAddress, 0);
+
+        hookProc ??= MainHookProc;
+        HookHandle = SetWindowsHookExA((int)idHook, Marshal.GetFunctionPointerForDelegate(hookProc), baseAddress, 0);
         if (HookHandle == nint.Zero)
         {
             throw new HookException($"P{nameof(Hook)} failed because SetWindowsHookEx returned a value of null.");
@@ -65,8 +68,15 @@ public abstract partial class WindowsHookBase(Hook idHook) : IWindowsHook
     /// </summary>
     public int UnHook()
     {
-        var success = UnhookWindowsHookEx(HookHandle);
+        if (HookHandle == nint.Zero)
+        {
+            return 0;
+        }
+
+        var hookHandle = HookHandle;
         HookHandle = nint.Zero;
+        var success = UnhookWindowsHookEx(hookHandle);
+        OnUnHook();
         return success;
     }
 
@@ -212,5 +222,12 @@ public abstract partial class WindowsHookBase(Hook idHook) : IWindowsHook
     /// </summary>
     protected abstract void OnUnHook();
 
-    ~WindowsHookBase() => UnHook();
+    ~WindowsHookBase()
+    {
+        if (HookHandle != nint.Zero)
+        {
+            _ = UnhookWindowsHookEx(HookHandle);
+            HookHandle = nint.Zero;
+        }
+    }
 }
